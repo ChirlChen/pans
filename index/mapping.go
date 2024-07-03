@@ -54,23 +54,31 @@ func NewMappingByDoc(doc interface{}) (*Mapping, error) {
 		m: make(map[string]IndexType),
 	}
 
-	err := docWalking(mp, doc, "", true, nil)
+	err := docWalking(mp, doc, "", true, "", nil)
 	return mp, err
 }
 
 func (mp *Mapping) DocWalking(doc interface{}) (map[string]value.Value, error) {
 	fields := make(map[string]value.Value, len(mp.m))
 
-	err := docWalking(mp, doc, "", false, &fields)
+	err := docWalking(mp, doc, "", false, "", &fields)
 	return fields, err
 }
 
-func docWalking(mapping *Mapping, doc interface{}, path FieldPath, mappingInit bool, outFields *map[string]value.Value) error {
+func docWalking(mapping *Mapping, doc interface{}, path FieldPath, mappingInit bool, idxTag string, outFields *map[string]value.Value) error {
+	if doc == nil {
+		return nil
+	}
+
+	fv, ok := doc.(FieldValuer)
+	if ok {
+		doc = fv.GetValue()
+	}
+
 	val := reflect.ValueOf(doc)
 	if val.IsZero() {
 		return nil
 	}
-
 	typ := val.Type()
 	for {
 		if typ.Kind() != reflect.Pointer {
@@ -81,36 +89,52 @@ func docWalking(mapping *Mapping, doc interface{}, path FieldPath, mappingInit b
 		typ = val.Type()
 	}
 
-	if typ.Kind() != reflect.Struct {
-		return fmt.Errorf("type `%s` is not support index", typ.Kind())
-	}
-
-	for i := 0; i < val.NumField(); i++ {
-		fval := val.Field(i)
-		ftyp := typ.Field(i)
-		if !fval.CanInterface() {
-			return fmt.Errorf("field: `%s` is not exported", ftyp.Name)
-		}
-
-		idxTag := ftyp.Tag.Get("index")
-		newPath := path.Join(ftyp.Name)
-		switch ftyp.Type.Kind() {
-		case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			if it, ok := mapping.m[newPath.String()]; ok && it != IndexTypeInvalid {
-				(*outFields)[newPath.String()] = value.NewValue(fval.Interface())
-			} else {
-				checkMapping(mapping, newPath, idxTag, mappingInit)
+	switch typ.Kind() {
+	case reflect.Struct:
+		for i := 0; i < val.NumField(); i++ {
+			fval := val.Field(i)
+			ftyp := typ.Field(i)
+			if !fval.CanInterface() {
+				if idxTag != "" {
+					return fmt.Errorf("field: `%s` is not exported", ftyp.Name)
+				}
+				continue
 			}
 
-		case reflect.Struct, reflect.Pointer: // , reflect.Slice, reflect.Array
-			err := docWalking(mapping, fval.Interface(), newPath, mappingInit, outFields)
+			tmpTag := func() string {
+				tag := ftyp.Tag.Get("index")
+				if len(tag) > 0 {
+					return tag
+				}
+
+				return idxTag
+			}()
+
+			newPath := path.Join(ftyp.Name)
+			err := docWalking(mapping, fval.Interface(), newPath, mappingInit, tmpTag, outFields)
 			if err != nil {
 				return err
 			}
-		default:
-			if len(idxTag) != 0 {
-				return fmt.Errorf("type `%s` is not support index", typ.Kind())
+		}
+	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Slice, reflect.Array:
+		if it, ok := mapping.m[path.String()]; ok && it != IndexTypeInvalid {
+			switch typ.Kind() {
+			case reflect.Slice, reflect.Array:
+				sval := NewSliceValue(val)
+				if err, ok := sval.(value.ErrorValue); ok {
+					return err.Val()
+				}
+
+				(*outFields)[path.String()] = sval
+			default:
+				(*outFields)[path.String()] = value.NewValue(val.Interface())
 			}
+		} else {
+			checkMapping(mapping, path, idxTag, mappingInit)
+		}
+	default: // reflect.Chan, reflect.Func, reflect.Map, reflect.Float*
+		if len(idxTag) != 0 {
+			return fmt.Errorf("type `%s` is not support index", typ.Kind())
 		}
 	}
 
@@ -135,4 +159,11 @@ func (p FieldPath) Join(sub string) FieldPath {
 	}
 
 	return FieldPath(sub)
+}
+
+// FieldValuer 支持对文档字段索引构建的值，进行加工返回，实现了该接口的字段，会以本接口返回的值作为字段构建索引的值
+//
+//	比如：时间字段 time.Time, 如果按照默认字段递归构建的话，会解析到 time.Time 内部字段，一一处理，通过实现 FieldValuer 接口后，比如返回对应时间戳, 则该字段就按照 int 类型构建索引，而不会递归解析 time.Time 内部字段
+type FieldValuer interface {
+	GetValue() interface{}
 }

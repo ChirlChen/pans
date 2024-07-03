@@ -9,8 +9,8 @@ import (
 	"github.com/araddon/qlbridge/value"
 
 	"github.com/RoaringBitmap/roaring"
-	"github.com/couchbase/vellum"
-	"github.com/couchbase/vellum/regexp"
+	"github.com/blevesearch/vellum"
+	"github.com/blevesearch/vellum/regexp"
 )
 
 type Query interface {

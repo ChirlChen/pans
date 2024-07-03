@@ -8,7 +8,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/araddon/qlbridge/value"
-	"github.com/couchbase/vellum"
+	"github.com/blevesearch/vellum"
 )
 
 type Segment struct {
@@ -87,12 +87,19 @@ func (seg *Segment) IndexDocuments(ctx context.Context, docs []Document) error {
 				seg.processStringTerm(seg.fieldsTermDic, inDocID, field, fieldTerm.Value().(string))
 			case value.IntType: // 整数
 				seg.processNumberFields(inDocID, field, fieldTerm.Value().(int64))
+			case value.StringsType: //
+				vals := fieldTerm.Value().([]string)
+				for _, term := range vals {
+					seg.processStringTerm(seg.fieldsTermDic, inDocID, field, term)
+				}
+			case IntSliceType:
+				vals := fieldTerm.Value().([]int64)
+				for _, term := range vals {
+					seg.processNumberFields(inDocID, field, term)
+				}
 			// case value.NumberType: // 浮点数
-
 			// case value.BoolType:
-
-			case value.TimeType: //
-
+			// case value.TimeType: //
 			default:
 				err = fmt.Errorf("type %v isn't currently supported", fieldTerm.Type())
 				continue

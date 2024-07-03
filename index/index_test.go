@@ -13,26 +13,28 @@ type Cfg struct {
 	Height int `json:"Height" index:"range"`
 
 	Name    *Name
-	Content *string `json:"Content"`
+	Content *[]string `json:"Content" index:"term"`
 	Map     map[string]interface{}
 	Friends []Name
+	Heights []int32 `index:"range"`
 }
 
 type Name struct {
-	First string `json:"First" index:"term"`
-	Last  string `json:"Last" index:"term"`
+	First   string  `json:"First" index:"term"`
+	Last    string  `json:"Last" index:"term"`
+	Heights []int32 `index:"range"`
 }
 
 var (
-	emptyStr = ""
+	emptyStr = []string{"abc", "def"}
 	keys     = []string{"1", "2", "3", "4", "5", "6", "7"}
-	d1       = Cfg{1, 12, 170, &Name{"chirl", "chen"}, &emptyStr, map[string]interface{}{"hello": "world"}, nil}
-	d2       = Cfg{2, 12, 175, &Name{"grey", "zhu"}, &emptyStr, nil, nil}
-	d3       = Cfg{3, 22, 175, &Name{"vicki", "zhu"}, &emptyStr, nil, nil}
-	d4       = Cfg{4, 22, 178, &Name{"vicky", "chu"}, &emptyStr, nil, nil}
-	d5       = Cfg{5, 25, 170, &Name{"zhengyu", "chen"}, &emptyStr, nil, nil}
-	d6       = Cfg{6, 26, 178, &Name{"zhenhai", "zhu"}, &emptyStr, nil, nil}
-	d7       = Cfg{7, 26, 175, &Name{"lucky", "chu"}, &emptyStr, nil, nil}
+	d1       = Cfg{1, 12, 170, &Name{"chirl", "chen", []int32{1, 2, 3}}, &emptyStr, map[string]interface{}{"hello": "world"}, nil, []int32{1, 2, 3}}
+	d2       = Cfg{2, 12, 175, &Name{"grey", "zhu", nil}, &emptyStr, nil, nil, []int32{1, 2, 3}}
+	d3       = Cfg{3, 22, 175, &Name{"vicki", "zhu", []int32{3, 4, 5}}, &emptyStr, nil, nil, []int32{1, 2, 3}}
+	d4       = Cfg{4, 22, 178, &Name{"vicky", "chu", []int32{5, 6, 7}}, nil, nil, nil, []int32{1, 2, 3}}
+	d5       = Cfg{5, 25, 170, &Name{"zhengyu", "chen", []int32{4, 5, 6}}, &emptyStr, nil, nil, []int32{1, 2, 3}}
+	d6       = Cfg{6, 26, 178, &Name{"zhenhai", "zhu", []int32{7, 8, 9}}, &emptyStr, nil, nil, []int32{1, 2, 3}}
+	d7       = Cfg{7, 26, 175, &Name{"lucky", "chu", []int32{8, 9, 10}}, &emptyStr, nil, nil, []int32{1, 2, 3}}
 
 	docs = []interface{}{
 		d1, d2, d3, d4, d5, d6, d7,
@@ -111,6 +113,18 @@ func TestIndex_Query(t *testing.T) {
 			args: args{
 				query: `like( Name.First, "vic.*") || in_array(Name.Last, []string{"zhu", "chu"})`,
 			}, want: []interface{}{d2, d3, d4, d6, d7}, wantErr: false,
+		},
+		{
+			name: "slice =",
+			args: args{
+				query: `Content == "def"`,
+			}, want: []interface{}{d1, d2, d3, d5, d6, d7}, wantErr: false,
+		},
+		{
+			name: "slice =",
+			args: args{
+				query: `in_array(Name.Heights,[]int32{3,4})`,
+			}, want: []interface{}{d1, d3, d5}, wantErr: false,
 		},
 	}
 	i := buildIndex(t, keys, docs, func(in interface{}) (got interface{}) {
