@@ -9,20 +9,20 @@ import (
 
 type Cfg struct {
 	ID     int `json:"auto_id"`
-	Age    int `json:"Age" index:"range"`
-	Height int `json:"Height" index:"range"`
+	Age    int `json:"Age" index:"on"`
+	Height int `json:"Height" index:"on"`
 
 	Name    *Name
-	Content *[]string `json:"Content" index:"term"`
+	Content *[]string `json:"Content" index:"on"`
 	Map     map[string]interface{}
 	Friends []Name
-	Heights []int32 `index:"range"`
+	Heights []int32 `index:"on"`
 }
 
 type Name struct {
-	First   string  `json:"First" index:"term"`
-	Last    string  `json:"Last" index:"term"`
-	Heights []int32 `index:"range"`
+	First   string  `json:"First" index:"on"`
+	Last    string  `json:"Last" index:"on"`
+	Heights []int32 `index:"on"`
 }
 
 var (
@@ -133,6 +133,7 @@ func TestIndex_Query(t *testing.T) {
 		// val.Content = fmt.Sprintf("%s.%s", val.Name.First, val.Name.Last)
 		return val
 	})
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := i.Query(tt.args.query, tt.args.opts...)
